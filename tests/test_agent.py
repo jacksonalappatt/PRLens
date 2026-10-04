@@ -12,7 +12,34 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from core.workspace_detector import inspect_git_remote, is_git_repo
 from harnesses.base import parse_review_report
+from harnesses.registry import HARNESS_REGISTRY
 from server.webhook_server import WebhookServer
+
+
+class TestModelTierSelector(unittest.TestCase):
+    def test_codex_tier_resolution(self):
+        codex = HARNESS_REGISTRY["codex"]
+        self.assertEqual(codex.resolve_model("high"), "o3-mini")
+        self.assertEqual(codex.resolve_model("medium"), "gpt-4o")
+        self.assertEqual(codex.resolve_model("low"), "gpt-4o-mini")
+
+    def test_claude_tier_resolution(self):
+        claude = HARNESS_REGISTRY["claude"]
+        self.assertEqual(claude.resolve_model("high"), "claude-3-7-sonnet")
+        self.assertEqual(claude.resolve_model("medium"), "claude-3-5-sonnet")
+        self.assertEqual(claude.resolve_model("low"), "claude-3-5-haiku")
+
+    def test_antigravity_tier_resolution(self):
+        ag = HARNESS_REGISTRY["antigravity"]
+        self.assertEqual(ag.resolve_model("high"), "pro")
+        self.assertEqual(ag.resolve_model("medium"), "flash")
+        self.assertEqual(ag.resolve_model("low"), "flash_lite")
+
+    def test_custom_model_mapping(self):
+        codex = HARNESS_REGISTRY["codex"]
+        custom = {"high": "o1", "medium": "o3", "low": "gpt-4.1-mini"}
+        self.assertEqual(codex.resolve_model("high", custom), "o1")
+        self.assertEqual(codex.resolve_model("low", custom), "gpt-4.1-mini")
 
 
 class TestReviewParser(unittest.TestCase):

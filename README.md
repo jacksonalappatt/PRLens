@@ -153,6 +153,8 @@ Select AI Harness to use [1-3] (press Enter for [1]): [PRESS ENTER]
 | `python main.py review <pr_id>` | Review a specific pull request immediately on-demand. |
 | `python main.py approve <pr_id>` | Open interactive gate to inspect findings and submit comments/vote to ADO. |
 | `python main.py list` | Display status and recommendations for all tracked review jobs. |
+| `python main.py --tier <tier>` | Override model tier (`high`, `medium`, `low`) for this run. |
+| `python main.py --model <name>` | Override with an explicit model identifier (e.g. `o3-mini`, `claude-3-7-sonnet`). |
 | `python main.py --check-harnesses` | Display diagnostic status of locally installed AI CLIs. |
 
 ---
@@ -189,6 +191,22 @@ Options:
 
 ---
 
+## 🎯 Model Tier Configuration (`high`, `medium`, `low`)
+
+PRLens allows configuring your model reasoning depth without asking every time on startup:
+
+- **`high`**: Maximally rigorous analysis using top-tier models (`o3-mini` / `claude-3-7-sonnet` / `pro`).
+- **`medium`**: Balanced speed and architectural depth (`gpt-4o` / `claude-3-5-sonnet` / `flash`).
+- **`low`**: Fast, lightweight checks (`gpt-4o-mini` / `claude-3-5-haiku` / `flash_lite`).
+
+Configure in `config.json` or override on demand:
+
+```powershell
+python main.py run --tier medium
+```
+
+---
+
 ## 🧹 Code Quality with Ruff
 
 PRLens uses [Ruff](https://github.com/astral-sh/ruff) for lightning-fast linting and code formatting:
@@ -219,6 +237,24 @@ All configuration is environment-driven and workspace-aware:
 ```json
 {
   "last_workspace": "",
+  "model_tier": "high",
+  "models": {
+    "codex": {
+      "high": "o3-mini",
+      "medium": "gpt-4o",
+      "low": "gpt-4o-mini"
+    },
+    "claude": {
+      "high": "claude-3-7-sonnet",
+      "medium": "claude-3-5-sonnet",
+      "low": "claude-3-5-haiku"
+    },
+    "antigravity": {
+      "high": "pro",
+      "medium": "flash",
+      "low": "flash_lite"
+    }
+  },
   "ado": {
     "organization": "",
     "project": "",

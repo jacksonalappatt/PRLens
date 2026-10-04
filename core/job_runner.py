@@ -20,12 +20,16 @@ class JobRunner:
         harness: BaseHarness,
         jobs_dir: Path,
         instructions_path: Path,
+        model_tier: str = "high",
+        model_name: Optional[str] = None,
     ):
         self.ado_client = ado_client
         self.worktree_manager = worktree_manager
         self.harness = harness
         self.jobs_dir = jobs_dir.resolve()
         self.instructions_path = instructions_path.resolve()
+        self.model_tier = model_tier
+        self.model_name = model_name or harness.resolve_model(model_tier)
         self.jobs_dir.mkdir(parents=True, exist_ok=True)
         self.registry_file = self.jobs_dir / "registry.json"
         self._ensure_registry()
@@ -69,20 +73,32 @@ class JobRunner:
         source_branch = pr_info.get("sourceBranch", "")
         target_branch = pr_info.get("targetBranch", "")
 
+        model_display = f"{self.model_name} ({self.model_tier.upper()})" if self.model_name else self.model_tier.upper()
+
         print("\n" + "=" * 70)
         print(f"🚀 [JobRunner] Starting Review for PR #{pr_id}: {title}")
-        print(f"   Branches: {source_branch} -> {target_branch}")
-        print(f"   Harness: {self.harness.display_name}")
+        print(f"   Branches   : {source_branch} -> {target_branch}")
+        print(f"   Harness    : {self.harness.display_name}")
+        print(f"   Model Tier : {model_display}")
         print("=" * 70)
 
         job_dir = self.jobs_dir / str(pr_id)
         job_dir.mkdir(parents=True, exist_ok=True)
-        (job_dir / "job.json").write_text(json.dumps(pr_info, indent=2), encoding="utf-8")
+        job_metadata = dict(pr_info)
+        job_metadata["model_tier"] = self.model_tier
+        job_metadata["model_name"] = self.model_name
+        (job_dir / "job.json").write_text(json.dumps(job_metadata, indent=2), encoding="utf-8")
 
         self.set_job_status(
             pr_id,
             "RUNNING",
-            {"title": title, "harness": self.harness.name, "started_at": datetime.now(timezone.utc).isoformat()},
+            {
+                "title": title,
+                "harness": self.harness.name,
+                "model_tier": self.model_tier,
+                "model_name": self.model_name,
+                "started_at": datetime.now(timezone.utc).isoformat(),
+            },
         )
 
         worktree_path = None
@@ -93,13 +109,15 @@ class JobRunner:
             (job_dir / "diff.patch").write_text(diff_text, encoding="utf-8")
 
             report_file = job_dir / "review_report.md"
-            print(f"[JobRunner] Invoking {self.harness.display_name} in isolated worktree...")
+            print(f"[JobRunner] Invoking {self.harness.display_name} [{model_display}] in isolated worktree...")
             result: HarnessResult = self.harness.run_review(
                 worktree_path=worktree_path,
                 pr_info=pr_info,
                 diff_text=diff_text,
                 instructions_path=self.instructions_path,
                 output_file=report_file,
+                model_tier=self.model_tier,
+                model_name=self.model_name,
             )
 
             (job_dir / "harness.log").write_text(result.raw_log, encoding="utf-8")
@@ -119,6 +137,8 @@ class JobRunner:
                         "comments_count": len(result.comments),
                         "report_file": str(report_file),
                         "duration_seconds": result.duration_seconds,
+                        "model_tier": self.model_tier,
+                        "model_name": self.model_name,
                     },
                 )
                 return True
@@ -127,13 +147,23 @@ class JobRunner:
                 self.set_job_status(
                     pr_id,
                     "FAILED",
-                    {"failed_at": datetime.now(timezone.utc).isoformat(), "error": result.error_message},
+                    {
+                        "failed_at": datetime.now(timezone.utc).isoformat(),
+                        "error": result.error_message,
+                    },
                 )
                 return False
 
         except Exception as e:
             print(f"❌ [JobRunner] Unexpected error processing PR #{pr_id}: {e}", file=sys.stderr)
-            self.set_job_status(pr_id, "ERROR", {"failed_at": datetime.now(timezone.utc).isoformat(), "error": str(e)})
+            self.set_job_status(
+                pr_id,
+                "ERROR",
+                {
+                    "failed_at": datetime.now(timezone.utc).isoformat(),
+                    "error": str(e),
+                },
+            )
             return False
 
         finally:

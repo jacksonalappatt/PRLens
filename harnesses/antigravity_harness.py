@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from .base import BaseHarness, HarnessResult, parse_review_report
 
@@ -13,6 +13,11 @@ from .base import BaseHarness, HarnessResult, parse_review_report
 class AntigravityHarness(BaseHarness):
     name = "antigravity"
     display_name = "Antigravity IDE / AGY"
+    DEFAULT_TIER_MODELS: Dict[str, str] = {
+        "high": "pro",
+        "medium": "flash",
+        "low": "flash_lite",
+    }
 
     KNOWN_PATHS = [
         Path(os.path.expanduser(r"~\AppData\Local\Programs\Antigravity IDE\bin\antigravity-ide.cmd")),
@@ -39,13 +44,23 @@ class AntigravityHarness(BaseHarness):
             return True, "Antigravity IDE (Detected)"
 
     def run_review(
-        self, worktree_path: Path, pr_info: dict, diff_text: str, instructions_path: Path, output_file: Path
+        self,
+        worktree_path: Path,
+        pr_info: dict,
+        diff_text: str,
+        instructions_path: Path,
+        output_file: Path,
+        model_tier: str = "high",
+        model_name: Optional[str] = None,
     ) -> HarnessResult:
         exe = self._get_executable()
         if not exe:
             return HarnessResult(success=False, error_message="Antigravity IDE binary not found.")
 
-        prompt = self.build_prompt(pr_info, instructions_path, output_file)
+        resolved_model = model_name or self.resolve_model(model_tier)
+        prompt = self.build_prompt(
+            pr_info, instructions_path, output_file, model_tier=model_tier, model_name=resolved_model
+        )
         start_time = time.time()
 
         prompt_file = worktree_path / "REVIEW_PROMPT.md"
@@ -53,9 +68,18 @@ class AntigravityHarness(BaseHarness):
 
         diff_file = worktree_path / "pr_diff.patch"
 
-        cmd = [exe, "chat", prompt, "-m", "agent", "-a", str(diff_file.resolve())]
+        cmd = [
+            exe,
+            "chat",
+            prompt,
+            "-m",
+            "agent",
+            "-a",
+            str(diff_file.resolve()),
+        ]
 
-        print(f"[AntigravityHarness] Invoking Antigravity IDE agent session in {worktree_path}...")
+        model_info = f" (Tier: {model_tier.upper()}, Model: {resolved_model})" if resolved_model else ""
+        print(f"[AntigravityHarness] Invoking Antigravity IDE agent session{model_info} in {worktree_path}...")
         try:
             process = subprocess.run(
                 cmd,
@@ -82,6 +106,8 @@ class AntigravityHarness(BaseHarness):
                     raw_log=raw_log,
                     duration_seconds=duration,
                     error_message="Antigravity completed but output report was not found.",
+                    model_name=resolved_model,
+                    model_tier=model_tier,
                 )
 
             vote, comments = parse_review_report(report_text)
@@ -92,6 +118,8 @@ class AntigravityHarness(BaseHarness):
                 comments=comments,
                 raw_log=raw_log,
                 duration_seconds=duration,
+                model_name=resolved_model,
+                model_tier=model_tier,
             )
 
         except subprocess.TimeoutExpired:
@@ -99,10 +127,14 @@ class AntigravityHarness(BaseHarness):
                 success=False,
                 error_message="Antigravity review execution timed out.",
                 duration_seconds=time.time() - start_time,
+                model_name=resolved_model,
+                model_tier=model_tier,
             )
         except Exception as e:
             return HarnessResult(
                 success=False,
                 error_message=f"Antigravity execution failed: {e}",
                 duration_seconds=time.time() - start_time,
+                model_name=resolved_model,
+                model_tier=model_tier,
             )

@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
-from typing import Tuple
+from typing import Dict, Optional, Tuple
 
 from .base import BaseHarness, HarnessResult, parse_review_report
 
@@ -12,6 +12,11 @@ from .base import BaseHarness, HarnessResult, parse_review_report
 class CodexHarness(BaseHarness):
     name = "codex"
     display_name = "Codex CLI (codex-cli)"
+    DEFAULT_TIER_MODELS: Dict[str, str] = {
+        "high": "o3-mini",
+        "medium": "gpt-4o",
+        "low": "gpt-4o-mini",
+    }
 
     def check_availability(self) -> Tuple[bool, str]:
         cmd_path = shutil.which("codex") or shutil.which("codex.cmd")
@@ -25,13 +30,23 @@ class CodexHarness(BaseHarness):
             return False, str(e)
 
     def run_review(
-        self, worktree_path: Path, pr_info: dict, diff_text: str, instructions_path: Path, output_file: Path
+        self,
+        worktree_path: Path,
+        pr_info: dict,
+        diff_text: str,
+        instructions_path: Path,
+        output_file: Path,
+        model_tier: str = "high",
+        model_name: Optional[str] = None,
     ) -> HarnessResult:
         cmd_path = shutil.which("codex") or shutil.which("codex.cmd")
         if not cmd_path:
             return HarnessResult(success=False, error_message="Codex CLI executable not found.")
 
-        prompt = self.build_prompt(pr_info, instructions_path, output_file)
+        resolved_model = model_name or self.resolve_model(model_tier)
+        prompt = self.build_prompt(
+            pr_info, instructions_path, output_file, model_tier=model_tier, model_name=resolved_model
+        )
         start_time = time.time()
 
         cmd = [
@@ -52,10 +67,19 @@ class CodexHarness(BaseHarness):
             "never",
         ]
 
-        print(f"[CodexHarness] Executing static Codex review (read-only sandbox) in {worktree_path}...")
+        if resolved_model:
+            cmd.extend(["-m", resolved_model])
+
+        model_info = f" with model '{resolved_model}' ({model_tier.upper()})" if resolved_model else ""
+        print(f"[CodexHarness] Executing static Codex review (read-only sandbox){model_info} in {worktree_path}...")
         try:
             process = subprocess.run(
-                cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900
+                cmd,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=900,
             )
             duration = time.time() - start_time
             raw_log = f"STDOUT:\n{process.stdout}\n\nSTDERR:\n{process.stderr}"
@@ -73,6 +97,8 @@ class CodexHarness(BaseHarness):
                     raw_log=raw_log,
                     duration_seconds=duration,
                     error_message=f"Codex completed with exit code {process.returncode} but produced no report.",
+                    model_name=resolved_model,
+                    model_tier=model_tier,
                 )
 
             vote, comments = parse_review_report(report_text)
@@ -83,6 +109,8 @@ class CodexHarness(BaseHarness):
                 comments=comments,
                 raw_log=raw_log,
                 duration_seconds=duration,
+                model_name=resolved_model,
+                model_tier=model_tier,
             )
 
         except subprocess.TimeoutExpired:
@@ -90,8 +118,14 @@ class CodexHarness(BaseHarness):
                 success=False,
                 error_message="Codex review execution timed out after 900 seconds.",
                 duration_seconds=time.time() - start_time,
+                model_name=resolved_model,
+                model_tier=model_tier,
             )
         except Exception as e:
             return HarnessResult(
-                success=False, error_message=f"Codex execution failed: {e}", duration_seconds=time.time() - start_time
+                success=False,
+                error_message=f"Codex execution failed: {e}",
+                duration_seconds=time.time() - start_time,
+                model_name=resolved_model,
+                model_tier=model_tier,
             )

@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from .base import BaseHarness, HarnessResult, parse_review_report
 
@@ -12,6 +12,11 @@ from .base import BaseHarness, HarnessResult, parse_review_report
 class ClaudeHarness(BaseHarness):
     name = "claude"
     display_name = "Claude Code CLI (@anthropic-ai/claude-code)"
+    DEFAULT_TIER_MODELS: Dict[str, str] = {
+        "high": "claude-3-7-sonnet",
+        "medium": "claude-3-5-sonnet",
+        "low": "claude-3-5-haiku",
+    }
 
     def _get_command(self) -> Optional[list]:
         claude_bin = shutil.which("claude") or shutil.which("claude.cmd")
@@ -31,20 +36,38 @@ class ClaudeHarness(BaseHarness):
             return False, str(e)
 
     def run_review(
-        self, worktree_path: Path, pr_info: dict, diff_text: str, instructions_path: Path, output_file: Path
+        self,
+        worktree_path: Path,
+        pr_info: dict,
+        diff_text: str,
+        instructions_path: Path,
+        output_file: Path,
+        model_tier: str = "high",
+        model_name: Optional[str] = None,
     ) -> HarnessResult:
         cmd = self._get_command()
         if not cmd:
             return HarnessResult(
-                success=False, error_message="Claude Code CLI not installed. Run 'npm i -g @anthropic-ai/claude-code'."
+                success=False,
+                error_message="Claude Code CLI not installed. Run 'npm i -g @anthropic-ai/claude-code'.",
             )
 
-        prompt = self.build_prompt(pr_info, instructions_path, output_file)
+        resolved_model = model_name or self.resolve_model(model_tier)
+        prompt = self.build_prompt(
+            pr_info, instructions_path, output_file, model_tier=model_tier, model_name=resolved_model
+        )
         start_time = time.time()
 
-        full_cmd = cmd + ["-p", prompt, "--dangerously-skip-permissions"]
+        full_cmd = cmd + [
+            "-p",
+            prompt,
+            "--dangerously-skip-permissions",
+        ]
+        if resolved_model:
+            full_cmd.extend(["--model", resolved_model])
 
-        print(f"[ClaudeHarness] Invoking Claude Code CLI non-interactively in {worktree_path}...")
+        model_info = f" with model '{resolved_model}' ({model_tier.upper()})" if resolved_model else ""
+        print(f"[ClaudeHarness] Invoking Claude Code CLI non-interactively{model_info} in {worktree_path}...")
         try:
             process = subprocess.run(
                 full_cmd,
@@ -71,6 +94,8 @@ class ClaudeHarness(BaseHarness):
                     raw_log=raw_log,
                     duration_seconds=duration,
                     error_message="Claude completed but produced no review report.",
+                    model_name=resolved_model,
+                    model_tier=model_tier,
                 )
 
             vote, comments = parse_review_report(report_text)
@@ -81,6 +106,8 @@ class ClaudeHarness(BaseHarness):
                 comments=comments,
                 raw_log=raw_log,
                 duration_seconds=duration,
+                model_name=resolved_model,
+                model_tier=model_tier,
             )
 
         except subprocess.TimeoutExpired:
@@ -88,8 +115,14 @@ class ClaudeHarness(BaseHarness):
                 success=False,
                 error_message="Claude review execution timed out.",
                 duration_seconds=time.time() - start_time,
+                model_name=resolved_model,
+                model_tier=model_tier,
             )
         except Exception as e:
             return HarnessResult(
-                success=False, error_message=f"Claude execution failed: {e}", duration_seconds=time.time() - start_time
+                success=False,
+                error_message=f"Claude execution failed: {e}",
+                duration_seconds=time.time() - start_time,
+                model_name=resolved_model,
+                model_tier=model_tier,
             )

@@ -16,6 +16,8 @@ class HarnessResult:
     raw_log: str = ""
     duration_seconds: float = 0.0
     error_message: Optional[str] = None
+    model_name: Optional[str] = None
+    model_tier: str = "high"
 
 
 def parse_review_report(report_text: str) -> Tuple[int, List[Dict[str, Any]]]:
@@ -58,7 +60,13 @@ def parse_review_report(report_text: str) -> Tuple[int, List[Dict[str, Any]]]:
             file_path = m.group(1).strip("`[] ")
             line_num = int(m.group(2))
             comment_text = m.group(3).strip()
-            comments.append({"filePath": file_path, "line": line_num, "comment": comment_text})
+            comments.append(
+                {
+                    "filePath": file_path,
+                    "line": line_num,
+                    "comment": comment_text,
+                }
+            )
 
     return vote, comments
 
@@ -66,6 +74,18 @@ def parse_review_report(report_text: str) -> Tuple[int, List[Dict[str, Any]]]:
 class BaseHarness(ABC):
     name: str = "base"
     display_name: str = "Base Harness"
+    DEFAULT_TIER_MODELS: Dict[str, str] = {
+        "high": "",
+        "medium": "",
+        "low": "",
+    }
+
+    def resolve_model(self, tier: str = "high", custom_models: Optional[Dict[str, str]] = None) -> Optional[str]:
+        """Resolves the concrete model identifier for a given tier (high, medium, low)."""
+        tier_key = tier.lower().strip()
+        if custom_models and tier_key in custom_models:
+            return custom_models[tier_key]
+        return self.DEFAULT_TIER_MODELS.get(tier_key)
 
     @abstractmethod
     def check_availability(self) -> Tuple[bool, str]:
@@ -74,12 +94,26 @@ class BaseHarness(ABC):
 
     @abstractmethod
     def run_review(
-        self, worktree_path: Path, pr_info: dict, diff_text: str, instructions_path: Path, output_file: Path
+        self,
+        worktree_path: Path,
+        pr_info: dict,
+        diff_text: str,
+        instructions_path: Path,
+        output_file: Path,
+        model_tier: str = "high",
+        model_name: Optional[str] = None,
     ) -> HarnessResult:
         """Executes the review within the worktree and writes the report to output_file."""
         pass
 
-    def build_prompt(self, pr_info: dict, instructions_path: Path, output_file: Path) -> str:
+    def build_prompt(
+        self,
+        pr_info: dict,
+        instructions_path: Path,
+        output_file: Path,
+        model_tier: str = "high",
+        model_name: Optional[str] = None,
+    ) -> str:
         """Constructs the prompt given to the AI harness."""
         instructions_text = instructions_path.read_text(encoding="utf-8", errors="replace")
         pr_id = pr_info.get("pr_id")
@@ -89,10 +123,12 @@ class BaseHarness(ABC):
         source = pr_info.get("sourceBranch", "")
         target = pr_info.get("targetBranch", "")
 
+        model_note = f"\nActive Model: {model_name} (Tier: {model_tier.upper()})" if model_name else ""
+
         return f"""You are reviewing Azure DevOps Pull Request #{pr_id}: "{title}".
 Author: {author}
 Source Branch: {source}
-Target Branch: {target}
+Target Branch: {target}{model_note}
 
 PR Description:
 {description}
@@ -118,7 +154,7 @@ TASK:
 3. Write your complete, detailed Markdown review report to the following path:
 `{output_file.resolve()}`
 Ensure the report includes:
-- System & Domain Impact Summary
+- System & Architecture Impact Summary
 - Five-Axis Quality Evaluation Matrix
 - Findings & Named Structural Remedies (Critical, Major, Minor, Praise)
 - Proposed ADO Actions (Recommended Vote: +10, +5, -5, or -10, plus specific inline comments in format `[file#Lline]: comment`)

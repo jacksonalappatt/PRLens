@@ -53,6 +53,15 @@ def main():
     parser.add_argument(
         "--harness", choices=["codex", "antigravity", "claude"], help="Bypass interactive picker with specific harness"
     )
+    parser.add_argument(
+        "--tier",
+        choices=["high", "medium", "low"],
+        help="Model reasoning tier: high, medium, or low (overrides config.json)",
+    )
+    parser.add_argument(
+        "--model",
+        help="Explicit model name override (e.g. o3-mini, claude-3-7-sonnet)",
+    )
     parser.add_argument("--workspace", help="Bypass interactive workspace prompt with specific repository path")
     parser.add_argument(
         "--check-harnesses", action="store_true", help="Display diagnostic status of all local AI harnesses"
@@ -143,6 +152,11 @@ def main():
         default_configured = cfg.get("harness", {}).get("default")
         chosen_harness = prompt_harness_selection(default_choice=default_configured)
 
+    # Resolve Model Tier & Model Identifier (from config, overridden by --tier / --model)
+    model_tier = (args.tier or cfg.get("model_tier", "high")).lower()
+    custom_models = cfg.get("models", {}).get(chosen_harness.name, {})
+    resolved_model = args.model or chosen_harness.resolve_model(model_tier, custom_models)
+
     worktree_mgr = WorktreeManager(repo_path=workspace_path, worktrees_dir=worktrees_dir)
     job_runner = JobRunner(
         ado_client=ado_client,
@@ -150,6 +164,8 @@ def main():
         harness=chosen_harness,
         jobs_dir=jobs_dir,
         instructions_path=instructions_path,
+        model_tier=model_tier,
+        model_name=resolved_model,
     )
     approval_gate = ApprovalGate(ado_client=ado_client, jobs_dir=jobs_dir)
 
@@ -182,6 +198,7 @@ def main():
         return
 
     # 4. COMMAND: run (Daemon Mode)
+    model_display = f"{resolved_model} ({model_tier.upper()})" if resolved_model else model_tier.upper()
     print("\n" + "=" * 70)
     print("🔍 PRLens: AUTONOMOUS AZURE DEVOPS PR REVIEW AGENT")
     print("=" * 70)
@@ -190,6 +207,7 @@ def main():
     print(f"  Repository   : {repo_name} ({workspace_path})")
     print(f"  Reviewer     : {user_info.get('displayName')} ({user_info.get('id')})")
     print(f"  AI Harness   : {chosen_harness.display_name} (Zero Direct APIs)")
+    print(f"  Model Tier   : {model_display}")
     print("=" * 70)
 
     srv_cfg = cfg.get("server", {})
