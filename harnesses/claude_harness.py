@@ -56,12 +56,19 @@ class ClaudeHarness(BaseHarness):
         prompt = self.build_prompt(
             pr_info, instructions_path, output_file, model_name=resolved_model, reasoning=reasoning
         )
-        start_time = time.time()
+        prompt_file = worktree_path / "REVIEW_PROMPT.md"
+        prompt_file.write_text(prompt, encoding="utf-8")
 
+        short_prompt = (
+            f"Read and execute the PR review instructions in {prompt_file.name}. "
+            f"Inspect pr_diff.patch and write your complete Markdown report to {output_file.resolve()}."
+        )
+
+        start_time = time.time()
         full_cmd = [
             *cmd,
             "-p",
-            prompt,
+            short_prompt,
             "--dangerously-skip-permissions",
         ]
         if resolved_model:

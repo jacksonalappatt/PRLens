@@ -33,10 +33,10 @@ class WorktreeManager:
         worktree_path = self.worktrees_dir / worktree_name
         local_branch_name = f"pr-review-{pr_id}"
 
-        # 1. Fetch remote tracking refs
+        # 1. Fetch remote tracking refs into refs/remotes/origin/*
         print(f"[Worktree] Fetching origin for {source_branch} and {target_branch}...")
-        self._run_git(["fetch", "origin", f"{source_branch}:{source_branch}"])
-        self._run_git(["fetch", "origin", f"{target_branch}:{target_branch}"])
+        self._run_git(["fetch", "origin", source_branch])
+        self._run_git(["fetch", "origin", target_branch])
 
         # 2. Cleanup any previous worktree with this name
         if worktree_path.exists():
@@ -45,17 +45,23 @@ class WorktreeManager:
         # 3. Add isolated worktree
         print(f"[Worktree] Creating worktree at {worktree_path} on branch {source_branch}...")
         add_res = self._run_git(
-            ["worktree", "add", "-B", local_branch_name, str(worktree_path), f"origin/{source_branch}"]
+            ["worktree", "add", "-B", local_branch_name, str(worktree_path), f"refs/remotes/origin/{source_branch}"]
         )
         if add_res.returncode != 0:
-            # Fallback without origin/ prefix if local branch exists
-            add_res = self._run_git(["worktree", "add", "-B", local_branch_name, str(worktree_path), source_branch])
+            # Fallback without refs/remotes/ prefix if local branch exists
+            add_res = self._run_git(
+                ["worktree", "add", "-B", local_branch_name, str(worktree_path), f"origin/{source_branch}"]
+            )
             if add_res.returncode != 0:
-                raise RuntimeError(f"Failed to create git worktree: {add_res.stderr.strip()}")
+                add_res = self._run_git(["worktree", "add", "-B", local_branch_name, str(worktree_path), source_branch])
+                if add_res.returncode != 0:
+                    raise RuntimeError(f"Failed to create git worktree: {add_res.stderr.strip()}")
 
-        # 4. Generate 3-dot merge-base diff
+        # 4. Generate 3-dot merge-base diff against refs/remotes/origin/{target_branch}
         print(f"[Worktree] Generating diff against origin/{target_branch}...")
-        diff_res = self._run_git(["diff", f"origin/{target_branch}...HEAD"], cwd=worktree_path)
+        diff_res = self._run_git(["diff", f"refs/remotes/origin/{target_branch}...HEAD"], cwd=worktree_path)
+        if diff_res.returncode != 0:
+            diff_res = self._run_git(["diff", f"origin/{target_branch}...HEAD"], cwd=worktree_path)
         diff_text = diff_res.stdout if diff_res.returncode == 0 else ""
 
         # Write diff.patch into worktree for quick inspection

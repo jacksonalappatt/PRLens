@@ -49,48 +49,69 @@ class CodexHarness(BaseHarness):
         )
         start_time = time.time()
 
-        cmd = [
-            cmd_path,
-            "exec",
-            prompt,
-            "-C",
-            str(worktree_path),
-            "-o",
-            str(output_file.resolve()),
-            "-s",
-            "read-only",
-            "-a",
-            "never",
-            "--add-dir",
-            str(output_file.parent.resolve()),
-            "--color",
-            "never",
-        ]
+        def _build_cmd(model_str: Optional[str]) -> list:
+            c = [
+                cmd_path,
+                "exec",
+                "-",
+                "-C",
+                str(worktree_path),
+                "-o",
+                str(output_file.resolve()),
+                "--dangerously-bypass-approvals-and-sandbox",
+                "--add-dir",
+                str(output_file.parent.resolve()),
+                "--color",
+                "never",
+            ]
+            if model_str:
+                c.extend(["-m", model_str])
+            if reasoning in ["low", "medium", "high"]:
+                c.extend(["-c", f'model_reasoning_effort="{reasoning}"'])
+            return c
 
-        if resolved_model:
-            cmd.extend(["-m", resolved_model])
-
-        if reasoning in ["low", "medium", "high"]:
-            cmd.extend(["-c", f'model_reasoning_effort="{reasoning}"'])
-
+        cmd = _build_cmd(resolved_model)
         model_info = f" with model '{resolved_model}' [reasoning: {reasoning}]" if resolved_model else ""
-        print(f"[CodexHarness] Executing static Codex review (read-only sandbox){model_info} in {worktree_path}...")
+        print(f"[CodexHarness] Executing static Codex review (headless CLI){model_info} in {worktree_path}...")
         try:
             process = subprocess.run(
                 cmd,
+                input=prompt,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
                 timeout=900,
             )
+            # Automatic fallback if ChatGPT account does not support enterprise/preview model
+            if "not supported when using Codex with a ChatGPT account" in (process.stderr or ""):
+                fallback_model = "gpt-5.6-luna" if "luna" in (resolved_model or "").lower() else "gpt-5.5"
+                print(
+                    f"[CodexHarness] OpenAI rejected '{resolved_model}' for ChatGPT accounts. "
+                    f"Retrying with supported account model '{fallback_model}'..."
+                )
+                cmd = _build_cmd(fallback_model)
+                process = subprocess.run(
+                    cmd,
+                    input=prompt,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=900,
+                )
+                resolved_model = fallback_model
+
             duration = time.time() - start_time
             raw_log = f"STDOUT:\n{process.stdout}\n\nSTDERR:\n{process.stderr}"
 
             report_text = ""
             if output_file.exists() and output_file.stat().st_size > 0:
-                report_text = output_file.read_text(encoding="utf-8", errors="replace")
-            elif process.stdout:
+                candidate = output_file.read_text(encoding="utf-8", errors="replace")
+                if self.is_valid_report(candidate):
+                    report_text = candidate
+
+            if not report_text and process.stdout and self.is_valid_report(process.stdout):
                 report_text = process.stdout
                 output_file.write_text(report_text, encoding="utf-8")
 

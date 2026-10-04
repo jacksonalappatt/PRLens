@@ -80,6 +80,36 @@ class BaseHarness(ABC):
         "low": "",
     }
 
+    @staticmethod
+    def is_valid_report(text: str) -> bool:
+        """Validates that a string is a meaningful AI review report and not CLI diagnostic noise."""
+        if not text or not text.strip():
+            return False
+        cleaned = text.strip()
+        # Reject CLI launcher noise (e.g. VS Code stdin redirection messages)
+        if "reading from stdin via:" in cleaned.lower() and len(cleaned.splitlines()) <= 4:
+            return False
+        # Reject raw user prompt echo
+        if cleaned.startswith("<USER_REQUEST>") and len(cleaned) < 600:
+            return False
+        # Reject conversational queries / clarification requests
+        query_phrases = [
+            "could you please provide",
+            "i need to know",
+            "please provide the organization",
+            "to proceed with the code review, i need",
+            "could you please specify",
+        ]
+        if any(qp in cleaned.lower() for qp in query_phrases):
+            return False
+        if len(cleaned) < 80:
+            return False
+        # Valid report must contain Markdown section headers
+        if "## " not in cleaned and "### " not in cleaned:
+            return False
+        keywords = ["review", "vote", "findings", "evaluation", "axis", "approved", "recommend", "status:"]
+        return any(k in cleaned.lower() for k in keywords)
+
     def resolve_model(
         self,
         reasoning: str = "high",

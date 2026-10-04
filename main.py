@@ -191,6 +191,8 @@ def main():
                 "createdBy": details.get("createdBy", {}).get("displayName"),
                 "repository": details.get("repository", {}).get("name"),
                 "repositoryId": details.get("repository", {}).get("id"),
+                "organization": org,
+                "project": project,
                 "sourceBranch": details.get("sourceRefName"),
                 "targetBranch": details.get("targetRefName"),
             }
