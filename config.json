@@ -1,0 +1,22 @@
+{
+  "last_workspace": "",
+  "ado": {
+    "organization": "",
+    "project": "",
+    "pat_env_var": "AZURE_DEVOPS_PAT"
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 7890,
+    "secret": ""
+  },
+  "polling": {
+    "enabled": true,
+    "interval_seconds": 60
+  },
+  "harness": {
+    "default": null,
+    "timeout_seconds": 900
+  },
+  "approval_mode": "manual"
+}

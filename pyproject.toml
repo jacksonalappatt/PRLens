@@ -1,0 +1,26 @@
+[project]
+name = "prlens"
+version = "0.1.0"
+description = "PRLens: Autonomous Azure DevOps PR review agent powered by local AI harnesses (Antigravity, Claude Code, Codex CLI) with zero direct APIs."
+readme = "README.md"
+requires-python = ">=3.9"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+]
+ignore = [
+    "E501", # line length handled by formatter
+    "E402", # module level import not at top of file (needed for sys.path manipulation)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

@@ -1,0 +1,9 @@
+# Worktrees, temporary diffs, and job logs
+worktrees/
+jobs/*/diff.patch
+jobs/*/worktree/
+jobs/*/harness.log
+__pycache__/
+*.py[cod]
+.DS_Store
+*.swp
