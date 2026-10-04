@@ -13,10 +13,10 @@ from .base import BaseHarness, HarnessResult, parse_review_report
 class AntigravityHarness(BaseHarness):
     name = "antigravity"
     display_name = "Antigravity IDE / AGY"
-    DEFAULT_TIER_MODELS: Dict[str, str] = {
-        "high": "pro",
-        "medium": "flash",
-        "low": "flash_lite",
+    DEFAULT_REASONING_MODELS: Dict[str, str] = {
+        "high": "3.8",
+        "medium": "3.8",
+        "low": "3.8",
     }
 
     KNOWN_PATHS = [
@@ -50,16 +50,16 @@ class AntigravityHarness(BaseHarness):
         diff_text: str,
         instructions_path: Path,
         output_file: Path,
-        model_tier: str = "high",
         model_name: Optional[str] = None,
+        reasoning: str = "high",
     ) -> HarnessResult:
         exe = self._get_executable()
         if not exe:
             return HarnessResult(success=False, error_message="Antigravity IDE binary not found.")
 
-        resolved_model = model_name or self.resolve_model(model_tier)
+        resolved_model = model_name or self.resolve_model(reasoning)
         prompt = self.build_prompt(
-            pr_info, instructions_path, output_file, model_tier=model_tier, model_name=resolved_model
+            pr_info, instructions_path, output_file, model_name=resolved_model, reasoning=reasoning
         )
         start_time = time.time()
 
@@ -78,7 +78,7 @@ class AntigravityHarness(BaseHarness):
             str(diff_file.resolve()),
         ]
 
-        model_info = f" (Tier: {model_tier.upper()}, Model: {resolved_model})" if resolved_model else ""
+        model_info = f" (Model: {resolved_model}, Reasoning: {reasoning.upper()})" if resolved_model else ""
         print(f"[AntigravityHarness] Invoking Antigravity IDE agent session{model_info} in {worktree_path}...")
         try:
             process = subprocess.run(
@@ -107,7 +107,7 @@ class AntigravityHarness(BaseHarness):
                     duration_seconds=duration,
                     error_message="Antigravity completed but output report was not found.",
                     model_name=resolved_model,
-                    model_tier=model_tier,
+                    reasoning=reasoning,
                 )
 
             vote, comments = parse_review_report(report_text)
@@ -119,7 +119,7 @@ class AntigravityHarness(BaseHarness):
                 raw_log=raw_log,
                 duration_seconds=duration,
                 model_name=resolved_model,
-                model_tier=model_tier,
+                reasoning=reasoning,
             )
 
         except subprocess.TimeoutExpired:
@@ -128,7 +128,7 @@ class AntigravityHarness(BaseHarness):
                 error_message="Antigravity review execution timed out.",
                 duration_seconds=time.time() - start_time,
                 model_name=resolved_model,
-                model_tier=model_tier,
+                reasoning=reasoning,
             )
         except Exception as e:
             return HarnessResult(
@@ -136,5 +136,5 @@ class AntigravityHarness(BaseHarness):
                 error_message=f"Antigravity execution failed: {e}",
                 duration_seconds=time.time() - start_time,
                 model_name=resolved_model,
-                model_tier=model_tier,
+                reasoning=reasoning,
             )

@@ -153,8 +153,8 @@ Select AI Harness to use [1-3] (press Enter for [1]): [PRESS ENTER]
 | `python main.py review <pr_id>` | Review a specific pull request immediately on-demand. |
 | `python main.py approve <pr_id>` | Open interactive gate to inspect findings and submit comments/vote to ADO. |
 | `python main.py list` | Display status and recommendations for all tracked review jobs. |
-| `python main.py --tier <tier>` | Override model tier (`high`, `medium`, `low`) for this run. |
-| `python main.py --model <name>` | Override with an explicit model identifier (e.g. `o3-mini`, `claude-3-7-sonnet`). |
+| `python main.py --reasoning <level>` | Override reasoning effort (`high`, `medium`, `low`) for this run (alias: `--tier`). |
+| `python main.py --model <name>` | Override with an explicit model identifier (e.g. `gpt-6`, `gpt-6-luna`, `3.8`, `claude-3-7-sonnet`). |
 | `python main.py --check-harnesses` | Display diagnostic status of locally installed AI CLIs. |
 
 ---
@@ -191,18 +191,33 @@ Options:
 
 ---
 
-## 🎯 Model Tier Configuration (`high`, `medium`, `low`)
+## 🎯 Model & Reasoning Effort Configuration
 
-PRLens allows configuring your model reasoning depth without asking every time on startup:
+PRLens cleanly decouples **Model Selection** from **Reasoning Effort** in `config.json` without asking on every startup:
 
-- **`high`**: Maximally rigorous analysis using top-tier models (`o3-mini` / `claude-3-7-sonnet` / `pro`).
-- **`medium`**: Balanced speed and architectural depth (`gpt-4o` / `claude-3-5-sonnet` / `flash`).
-- **`low`**: Fast, lightweight checks (`gpt-4o-mini` / `claude-3-5-haiku` / `flash_lite`).
+- **Reasoning Effort (`high`, `medium`, `low`)**:
+  - **`high`**:
+    - **Codex CLI**: `gpt-6` with reasoning effort `high`
+    - **Antigravity IDE**: `3.8` with reasoning effort `high`
+    - **Claude Code CLI**: `claude-3-7-sonnet` with reasoning effort `high`
+  - **`medium`**:
+    - **Codex CLI**: `gpt-6-luna` with reasoning effort `medium`
+    - **Antigravity IDE**: `3.8` with reasoning effort `medium`
+    - **Claude Code CLI**: `claude-3-5-sonnet` with reasoning effort `medium`
+  - **`low`**:
+    - **Codex CLI**: `gpt-6-luna` with reasoning effort `low`
+    - **Antigravity IDE**: `3.8` with reasoning effort `low`
+    - **Claude Code CLI**: `claude-3-5-haiku` with reasoning effort `low`
 
-Configure in `config.json` or override on demand:
+- **Independent Model Toggling**:
+  In `config.json`, the model and reasoning are kept separate. You can toggle the model string for any harness (e.g. set `"models": { "codex": "gpt-6-luna" }`) without having to update the `"reasoning"` level, and vice-versa!
+
+Configure in `config.json` or override on demand via CLI:
 
 ```powershell
-python main.py run --tier medium
+python main.py run --reasoning medium
+# or override with an explicit model
+python main.py run --reasoning high --model gpt-6-luna
 ```
 
 ---
@@ -237,22 +252,27 @@ All configuration is environment-driven and workspace-aware:
 ```json
 {
   "last_workspace": "",
-  "model_tier": "high",
+  "reasoning": "high",
   "models": {
+    "codex": null,
+    "antigravity": null,
+    "claude": null
+  },
+  "default_models": {
     "codex": {
-      "high": "o3-mini",
-      "medium": "gpt-4o",
-      "low": "gpt-4o-mini"
+      "high": "gpt-6",
+      "medium": "gpt-6-luna",
+      "low": "gpt-6-luna"
+    },
+    "antigravity": {
+      "high": "3.8",
+      "medium": "3.8",
+      "low": "3.8"
     },
     "claude": {
       "high": "claude-3-7-sonnet",
       "medium": "claude-3-5-sonnet",
       "low": "claude-3-5-haiku"
-    },
-    "antigravity": {
-      "high": "pro",
-      "medium": "flash",
-      "low": "flash_lite"
     }
   },
   "ado": {

@@ -1,21 +1,26 @@
 {
   "last_workspace": "",
-  "model_tier": "high",
+  "reasoning": "high",
   "models": {
+    "codex": null,
+    "antigravity": null,
+    "claude": null
+  },
+  "default_models": {
     "codex": {
-      "high": "o3-mini",
-      "medium": "gpt-4o",
-      "low": "gpt-4o-mini"
+      "high": "gpt-6",
+      "medium": "gpt-6-luna",
+      "low": "gpt-6-luna"
+    },
+    "antigravity": {
+      "high": "3.8",
+      "medium": "3.8",
+      "low": "3.8"
     },
     "claude": {
       "high": "claude-3-7-sonnet",
       "medium": "claude-3-5-sonnet",
       "low": "claude-3-5-haiku"
-    },
-    "antigravity": {
-      "high": "pro",
-      "medium": "flash",
-      "low": "flash_lite"
     }
   },
   "ado": {

@@ -12,10 +12,10 @@ from .base import BaseHarness, HarnessResult, parse_review_report
 class CodexHarness(BaseHarness):
     name = "codex"
     display_name = "Codex CLI (codex-cli)"
-    DEFAULT_TIER_MODELS: Dict[str, str] = {
-        "high": "o3-mini",
-        "medium": "gpt-4o",
-        "low": "gpt-4o-mini",
+    DEFAULT_REASONING_MODELS: Dict[str, str] = {
+        "high": "gpt-6",
+        "medium": "gpt-6-luna",
+        "low": "gpt-6-luna",
     }
 
     def check_availability(self) -> Tuple[bool, str]:
@@ -36,16 +36,16 @@ class CodexHarness(BaseHarness):
         diff_text: str,
         instructions_path: Path,
         output_file: Path,
-        model_tier: str = "high",
         model_name: Optional[str] = None,
+        reasoning: str = "high",
     ) -> HarnessResult:
         cmd_path = shutil.which("codex") or shutil.which("codex.cmd")
         if not cmd_path:
             return HarnessResult(success=False, error_message="Codex CLI executable not found.")
 
-        resolved_model = model_name or self.resolve_model(model_tier)
+        resolved_model = model_name or self.resolve_model(reasoning)
         prompt = self.build_prompt(
-            pr_info, instructions_path, output_file, model_tier=model_tier, model_name=resolved_model
+            pr_info, instructions_path, output_file, model_name=resolved_model, reasoning=reasoning
         )
         start_time = time.time()
 
@@ -70,7 +70,10 @@ class CodexHarness(BaseHarness):
         if resolved_model:
             cmd.extend(["-m", resolved_model])
 
-        model_info = f" with model '{resolved_model}' ({model_tier.upper()})" if resolved_model else ""
+        if reasoning in ["low", "medium", "high"]:
+            cmd.extend(["-c", f'model_reasoning_effort="{reasoning}"'])
+
+        model_info = f" with model '{resolved_model}' [reasoning: {reasoning}]" if resolved_model else ""
         print(f"[CodexHarness] Executing static Codex review (read-only sandbox){model_info} in {worktree_path}...")
         try:
             process = subprocess.run(
@@ -98,7 +101,7 @@ class CodexHarness(BaseHarness):
                     duration_seconds=duration,
                     error_message=f"Codex completed with exit code {process.returncode} but produced no report.",
                     model_name=resolved_model,
-                    model_tier=model_tier,
+                    reasoning=reasoning,
                 )
 
             vote, comments = parse_review_report(report_text)
@@ -110,7 +113,7 @@ class CodexHarness(BaseHarness):
                 raw_log=raw_log,
                 duration_seconds=duration,
                 model_name=resolved_model,
-                model_tier=model_tier,
+                reasoning=reasoning,
             )
 
         except subprocess.TimeoutExpired:
@@ -119,7 +122,7 @@ class CodexHarness(BaseHarness):
                 error_message="Codex review execution timed out after 900 seconds.",
                 duration_seconds=time.time() - start_time,
                 model_name=resolved_model,
-                model_tier=model_tier,
+                reasoning=reasoning,
             )
         except Exception as e:
             return HarnessResult(
@@ -127,5 +130,5 @@ class CodexHarness(BaseHarness):
                 error_message=f"Codex execution failed: {e}",
                 duration_seconds=time.time() - start_time,
                 model_name=resolved_model,
-                model_tier=model_tier,
+                reasoning=reasoning,
             )

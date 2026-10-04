@@ -12,7 +12,7 @@ from .base import BaseHarness, HarnessResult, parse_review_report
 class ClaudeHarness(BaseHarness):
     name = "claude"
     display_name = "Claude Code CLI (@anthropic-ai/claude-code)"
-    DEFAULT_TIER_MODELS: Dict[str, str] = {
+    DEFAULT_REASONING_MODELS: Dict[str, str] = {
         "high": "claude-3-7-sonnet",
         "medium": "claude-3-5-sonnet",
         "low": "claude-3-5-haiku",
@@ -42,8 +42,8 @@ class ClaudeHarness(BaseHarness):
         diff_text: str,
         instructions_path: Path,
         output_file: Path,
-        model_tier: str = "high",
         model_name: Optional[str] = None,
+        reasoning: str = "high",
     ) -> HarnessResult:
         cmd = self._get_command()
         if not cmd:
@@ -52,13 +52,14 @@ class ClaudeHarness(BaseHarness):
                 error_message="Claude Code CLI not installed. Run 'npm i -g @anthropic-ai/claude-code'.",
             )
 
-        resolved_model = model_name or self.resolve_model(model_tier)
+        resolved_model = model_name or self.resolve_model(reasoning)
         prompt = self.build_prompt(
-            pr_info, instructions_path, output_file, model_tier=model_tier, model_name=resolved_model
+            pr_info, instructions_path, output_file, model_name=resolved_model, reasoning=reasoning
         )
         start_time = time.time()
 
-        full_cmd = cmd + [
+        full_cmd = [
+            *cmd,
             "-p",
             prompt,
             "--dangerously-skip-permissions",
@@ -66,7 +67,7 @@ class ClaudeHarness(BaseHarness):
         if resolved_model:
             full_cmd.extend(["--model", resolved_model])
 
-        model_info = f" with model '{resolved_model}' ({model_tier.upper()})" if resolved_model else ""
+        model_info = f" with model '{resolved_model}' [reasoning: {reasoning}]" if resolved_model else ""
         print(f"[ClaudeHarness] Invoking Claude Code CLI non-interactively{model_info} in {worktree_path}...")
         try:
             process = subprocess.run(
@@ -95,7 +96,7 @@ class ClaudeHarness(BaseHarness):
                     duration_seconds=duration,
                     error_message="Claude completed but produced no review report.",
                     model_name=resolved_model,
-                    model_tier=model_tier,
+                    reasoning=reasoning,
                 )
 
             vote, comments = parse_review_report(report_text)
@@ -107,7 +108,7 @@ class ClaudeHarness(BaseHarness):
                 raw_log=raw_log,
                 duration_seconds=duration,
                 model_name=resolved_model,
-                model_tier=model_tier,
+                reasoning=reasoning,
             )
 
         except subprocess.TimeoutExpired:
@@ -116,7 +117,7 @@ class ClaudeHarness(BaseHarness):
                 error_message="Claude review execution timed out.",
                 duration_seconds=time.time() - start_time,
                 model_name=resolved_model,
-                model_tier=model_tier,
+                reasoning=reasoning,
             )
         except Exception as e:
             return HarnessResult(
@@ -124,5 +125,5 @@ class ClaudeHarness(BaseHarness):
                 error_message=f"Claude execution failed: {e}",
                 duration_seconds=time.time() - start_time,
                 model_name=resolved_model,
-                model_tier=model_tier,
+                reasoning=reasoning,
             )

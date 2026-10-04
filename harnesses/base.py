@@ -17,7 +17,7 @@ class HarnessResult:
     duration_seconds: float = 0.0
     error_message: Optional[str] = None
     model_name: Optional[str] = None
-    model_tier: str = "high"
+    reasoning: str = "high"
 
 
 def parse_review_report(report_text: str) -> Tuple[int, List[Dict[str, Any]]]:
@@ -74,18 +74,39 @@ def parse_review_report(report_text: str) -> Tuple[int, List[Dict[str, Any]]]:
 class BaseHarness(ABC):
     name: str = "base"
     display_name: str = "Base Harness"
-    DEFAULT_TIER_MODELS: Dict[str, str] = {
+    DEFAULT_REASONING_MODELS: Dict[str, str] = {
         "high": "",
         "medium": "",
         "low": "",
     }
 
-    def resolve_model(self, tier: str = "high", custom_models: Optional[Dict[str, str]] = None) -> Optional[str]:
-        """Resolves the concrete model identifier for a given tier (high, medium, low)."""
-        tier_key = tier.lower().strip()
-        if custom_models and tier_key in custom_models:
-            return custom_models[tier_key]
-        return self.DEFAULT_TIER_MODELS.get(tier_key)
+    def resolve_model(
+        self,
+        reasoning: str = "high",
+        configured_model: Optional[Any] = None,
+        default_mapping: Optional[Dict[str, str]] = None,
+    ) -> str:
+        """Resolves the concrete model name.
+
+        If configured_model is a dict (legacy/custom mapping support), treats it as default_mapping.
+        If configured_model is explicitly given as a string (e.g. 'gpt-6' or 'gpt-6-luna'), uses it directly.
+        Otherwise falls back to default_mapping or class DEFAULT_REASONING_MODELS for the reasoning level.
+        """
+        if isinstance(configured_model, dict):
+            default_mapping = configured_model
+            configured_model = None
+
+        if configured_model and isinstance(configured_model, str) and configured_model.strip():
+            return configured_model.strip()
+
+        reasoning_key = reasoning.lower().strip()
+        if default_mapping and reasoning_key in default_mapping:
+            val = default_mapping[reasoning_key]
+            if val:
+                return str(val).strip()
+
+        tier_map = getattr(self, "DEFAULT_REASONING_MODELS", {})
+        return tier_map.get(reasoning_key, "")
 
     @abstractmethod
     def check_availability(self) -> Tuple[bool, str]:
@@ -100,8 +121,8 @@ class BaseHarness(ABC):
         diff_text: str,
         instructions_path: Path,
         output_file: Path,
-        model_tier: str = "high",
         model_name: Optional[str] = None,
+        reasoning: str = "high",
     ) -> HarnessResult:
         """Executes the review within the worktree and writes the report to output_file."""
         pass
@@ -111,8 +132,8 @@ class BaseHarness(ABC):
         pr_info: dict,
         instructions_path: Path,
         output_file: Path,
-        model_tier: str = "high",
         model_name: Optional[str] = None,
+        reasoning: str = "high",
     ) -> str:
         """Constructs the prompt given to the AI harness."""
         instructions_text = instructions_path.read_text(encoding="utf-8", errors="replace")
@@ -123,7 +144,7 @@ class BaseHarness(ABC):
         source = pr_info.get("sourceBranch", "")
         target = pr_info.get("targetBranch", "")
 
-        model_note = f"\nActive Model: {model_name} (Tier: {model_tier.upper()})" if model_name else ""
+        model_note = f"\nActive Model: {model_name} (Reasoning: {reasoning.upper()})" if model_name else ""
 
         return f"""You are reviewing Azure DevOps Pull Request #{pr_id}: "{title}".
 Author: {author}

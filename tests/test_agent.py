@@ -19,9 +19,9 @@ from server.webhook_server import WebhookServer
 class TestModelTierSelector(unittest.TestCase):
     def test_codex_tier_resolution(self):
         codex = HARNESS_REGISTRY["codex"]
-        self.assertEqual(codex.resolve_model("high"), "o3-mini")
-        self.assertEqual(codex.resolve_model("medium"), "gpt-4o")
-        self.assertEqual(codex.resolve_model("low"), "gpt-4o-mini")
+        self.assertEqual(codex.resolve_model("high"), "gpt-6")
+        self.assertEqual(codex.resolve_model("medium"), "gpt-6-luna")
+        self.assertEqual(codex.resolve_model("low"), "gpt-6-luna")
 
     def test_claude_tier_resolution(self):
         claude = HARNESS_REGISTRY["claude"]
@@ -31,9 +31,19 @@ class TestModelTierSelector(unittest.TestCase):
 
     def test_antigravity_tier_resolution(self):
         ag = HARNESS_REGISTRY["antigravity"]
-        self.assertEqual(ag.resolve_model("high"), "pro")
-        self.assertEqual(ag.resolve_model("medium"), "flash")
-        self.assertEqual(ag.resolve_model("low"), "flash_lite")
+        self.assertEqual(ag.resolve_model("high"), "3.8")
+        self.assertEqual(ag.resolve_model("medium"), "3.8")
+        self.assertEqual(ag.resolve_model("low"), "3.8")
+
+    def test_model_toggle_independent_of_reasoning(self):
+        codex = HARNESS_REGISTRY["codex"]
+        # User toggles model to gpt-6-luna without changing reasoning high
+        self.assertEqual(codex.resolve_model("high", configured_model="gpt-6-luna"), "gpt-6-luna")
+        # User toggles model to gpt-6 without changing reasoning low
+        self.assertEqual(codex.resolve_model("low", configured_model="gpt-6"), "gpt-6")
+        # Antigravity model override
+        ag = HARNESS_REGISTRY["antigravity"]
+        self.assertEqual(ag.resolve_model("low", configured_model="custom-gemini"), "custom-gemini")
 
     def test_custom_model_mapping(self):
         codex = HARNESS_REGISTRY["codex"]
